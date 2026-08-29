@@ -11,64 +11,21 @@ Applies a three-pane layout to every git worktree Herdr creates or opens:
 +---------+---------+-------------------+
 ```
 
-Each pane opens in the worktree's directory with its command already running.
+Each pane opens in the worktree's directory preventing you from needing to manage worktrees by hand. 
 
-## Files
+Personally, I hate the friction of manually creating and managing worktrees in any type of agentic program 
+(Claude, Supacode, Orca, etc.), so this is useful when skills and prompts tell my agent to create a new worktree.
 
-| File                | Purpose                                                              |
-|---------------------|----------------------------------------------------------------------|
-| `herdr-plugin.toml` | Manifest. Subscribes to the event set below and runs the script.     |
-| `apply-layout.sh`   | Generic hook: guards, dedupes, injects runtime values, sends layout. |
-| `layout.json`       | The declarative `layout.apply` request. **Edit this to change the layout.** |
-
-The script contains no layout JSON — change panes, commands, ratios, or labels
-by editing `layout.json` only.
-
-## Why it subscribes to several events
-
-How a worktree is created determines which event Herdr emits. `herdr worktree
-create` (CLI) reliably emits `worktree.created`, but on some versions the
-interactive "new worktree" UI path emits only `workspace.focused`. To fire
-regardless, the plugin subscribes to `worktree.created`, `worktree.opened`,
-`workspace.created`, and `workspace.focused`, plus `worktree.removed` for
-cleanup.
-
-That set is intentionally noisy — `workspace.focused` fires on *every* focus,
-including your main checkout — so the script protects itself two ways:
-
-1. **Guard.** For ambiguous `workspace.*` events it acts only when the
-   directory is a *linked* git worktree (git-dir differs from git-common-dir).
-   The main checkout, non-git directories, and ordinary focus changes are
-   skipped. `worktree.*` events are trusted without the check.
-2. **Dedupe.** It takes an atomic claim (a directory named after a hash of the
-   worktree path) under `HERDR_PLUGIN_STATE_DIR/claims`. The first event to
-   claim a path applies the layout; simultaneous or later duplicate events for
-   the same path exit without doing anything, so the layout is applied exactly
-   once. `worktree.removed` releases the claim so a path reused by a future
-   worktree can be set up again. A failed apply also releases the claim, so a
-   subsequent event retries.
-
-## Customizing the layout
-
-`layout.json` is a normal `layout.apply` request. Leave `params.workspace_id`,
-`params.tab_id`, and each pane's `cwd` as `null`; the script fills them in per
-worktree. `ratio` is the fraction given to `first`, so `0.5` everywhere yields
-two quarters on the left and a half on the right. A pane's `command` is an argv
-array; the pane closes when that process exits, so wrap it (e.g.
-`["sh","-lc","nvim .; exec $SHELL"]`) if you want a shell to survive quitting.
+Please note that the creation of worktrees MUST be handled through the Herdr CLI. Herdr only listens for it's own `herdr worktree ...` events. 
+Using `git worktree ...` commands will not run this plugin.
 
 ## Install
 
 From a public GitHub repo (this directory at the repo root):
 
 ```sh
-herdr plugin install <owner>/<repo>
-```
+ herdr plugin install Wyatth7/herdr/plugins/worktree-layout
 
-Or link a local checkout while developing:
-
-```sh
-herdr plugin link /absolute/path/to/worktree-layout
 ```
 
 ## Requirements
