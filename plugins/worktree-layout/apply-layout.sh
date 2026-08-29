@@ -49,23 +49,30 @@ STATE_DIR="${HERDR_PLUGIN_STATE_DIR:-${TMPDIR:-/tmp}/herdr-worktree-layout}"
 mkdir -p "$STATE_DIR/claims"
 
 EVENT="${HERDR_PLUGIN_EVENT:-}"
-JSON="$HERDR_PLUGIN_EVENT_JSON"
+RAW="$HERDR_PLUGIN_EVENT_JSON"
+
+# Herdr >= 0.8 wraps every hook payload as {"event":"<name>","data":{...}}.
+# Older builds passed the inner object directly. Accept both shapes.
+JSON="$(jq -c '.data // .' <<<"$RAW")"
 
 # --- pull values from whichever payload shape arrived ------------------------
-# NOTE: verify these key paths on your Herdr version by logging "$JSON" once
-#       (see README). worktree.* events carry .worktree.path; workspace.* events
-#       carry the directory under one of the candidates below.
+# worktree.* events carry .worktree.path (absolute checkout path).
+# workspace.* events carry .workspace.worktree.checkout_path instead — note the
+# different field name; there is no .workspace.cwd/.root/.path on any version.
 DIR="$(jq -r '
     .worktree.path
+    // .workspace.worktree.checkout_path
     // .workspace.worktree.path
-    // .workspace.cwd
-    // .workspace.root
-    // .workspace.path
     // empty' <<<"$JSON")"
 WS="$(jq -r '.workspace.workspace_id // .workspace.id // empty' <<<"$JSON")"
-TAB="$(jq -r '.workspace.tab_id // empty' <<<"$JSON")"
+TAB="$(jq -r '.workspace.active_tab_id // .workspace.tab_id // empty' <<<"$JSON")"
 
-# If Herdr did not set HERDR_PLUGIN_EVENT, infer the class from the payload.
+# If Herdr did not set HERDR_PLUGIN_EVENT, fall back to the envelope's own name
+# ("worktree_created" -> "worktree.created"), then to payload shape.
+if [ -z "$EVENT" ]; then
+  EVENT="$(jq -r '.event // empty' <<<"$RAW")"
+  EVENT="${EVENT/_/.}"
+fi
 if [ -z "$EVENT" ]; then
   if [ "$(jq -r 'has("worktree")' <<<"$JSON")" = "true" ]; then
     EVENT="worktree.inferred"
@@ -126,10 +133,15 @@ release_on_fail() { rmdir "$CLAIM" 2>/dev/null || true; }
 }
 
 # --- build the request from layout.json, injecting the dynamic fields --------
+# layout.apply rejects a request carrying BOTH workspace_id and tab_id
+# ("invalid_target: use either tab_id or workspace_id, not both"), so send
+# exactly one and delete the other placeholder from layout.json.
 request="$(
   jq -c --arg ws "$WS" --arg tab "$TAB" --arg cwd "$DIR" '
-      .params.workspace_id = $ws
-      | (if $tab == "" then . else .params.tab_id = $tab end)
+      (if $tab == ""
+       then .params.workspace_id = $ws | del(.params.tab_id)
+       else .params.tab_id = $tab | del(.params.workspace_id)
+       end)
       | .params.root |= walk(
           if type == "object" and .type == "pane" then .cwd = $cwd else . end
         )
@@ -142,7 +154,9 @@ request="$(
 
 # --- send it and check the reply ---------------------------------------------
 reply="$(printf '%s\n' "$request" | socat -t 5 - "UNIX-CONNECT:$HERDR_SOCKET_PATH" 2>/dev/null || true)"
-if printf '%s' "$reply" | jq -e 'select(.id == "apply-layout") | has("error")' >/dev/null 2>&1; then
+# NB: match on the error field alone. The old check keyed on id == "apply-layout"
+# while layout.json sends id "a", so every error reply was silently swallowed.
+if printf '%s' "$reply" | jq -e 'has("error")' >/dev/null 2>&1; then
   log "layout.apply returned an error: $reply"
   release_on_fail
   exit 1
