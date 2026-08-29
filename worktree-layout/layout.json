@@ -1,0 +1,18 @@
+{
+  "id": "a",
+  "method": "layout.apply",
+  "params": {
+    "workspace_id": "<WS>",
+    "tab_id": "<WS>:t1",
+    "focus": true,
+    "root": {
+      "type": "split", "direction": "right", "ratio": 0.5,
+      "first": {
+        "type": "split", "direction": "right", "ratio": 0.5,
+        "first":  { "type": "pane", "label": "claude", "cwd": "<DIR>", "command": ["claude"] },
+        "second": { "type": "pane", "label": "codex",  "cwd": "<DIR>", "command": ["codex"] }
+      },
+      "second": { "type": "pane", "label": "nvim", "cwd": "<DIR>", "command": ["nvim", "."] }
+    }
+  }
+}

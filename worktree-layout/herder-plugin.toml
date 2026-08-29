@@ -1,0 +1,33 @@
+id = "wyatth7.worktree-layout"
+name = "Worktree Layout"
+version = "0.3.0"
+min_herdr_version = "0.8.0"
+description = "Apply a claude/codex/nvim three-pane layout to each new git worktree."
+platforms = ["linux", "macos"]
+
+# Subscribe broadly so the hook fires no matter how the worktree was created.
+# The CLI path (`herdr worktree create`) emits worktree.created, but on some
+# versions the interactive "new worktree" UI path emits ONLY workspace.focused.
+# The script guards ambiguous events and dedupes by worktree path, so the
+# layout is still applied exactly once.
+[[events]]
+on = "worktree.created"
+command = ["bash", "apply-layout.sh"]
+
+[[events]]
+on = "worktree.opened"
+command = ["bash", "apply-layout.sh"]
+
+[[events]]
+on = "workspace.created"
+command = ["bash", "apply-layout.sh"]
+
+[[events]]
+on = "workspace.focused"
+command = ["bash", "apply-layout.sh"]
+
+# Releases the per-path claim so a path reused by a later worktree can be set
+# up again instead of being skipped forever.
+[[events]]
+on = "worktree.removed"
+command = ["bash", "apply-layout.sh"]
