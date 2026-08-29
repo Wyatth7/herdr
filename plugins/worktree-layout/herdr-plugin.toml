@@ -1,7 +1,7 @@
 id = "wyatth7.worktree-layout"
 name = "Worktree Layout"
 version = "0.3.0"
-min_herdr_version = "0.8.0"
+min_herdr_version = "0.7.0"
 description = "Apply a claude/codex/nvim three-pane layout to each new git worktree."
 platforms = ["linux", "macos"]
 
